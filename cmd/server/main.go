@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -13,34 +14,45 @@ var upgrader = websocket.Upgrader{
 }
 
 type client struct {
-	conn *websocket.Conn
-	room string
-	send chan []byte
+	conn   *websocket.Conn
+	room   string
+	userID string
+	send   chan []byte
 }
 
 var clients = make(map[string]map[*client]bool)
 var broadcast = make(chan message)
 
 type message struct {
-	room string
-	msg  []byte
+	room   string
+	userID string
+	msg    []byte
 }
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
-	conn, _ := upgrader.Upgrade(w, r, nil)
+	userID := uuid.New().String()
+	header := http.Header{}
+	header.Set("Userid", userID)
+	conn, _ := upgrader.Upgrade(w, r, header)
 	room := r.URL.Query().Get("room")
 
-	cl := &client{conn: conn, room: room, send: make(chan []byte)}
+	cl := &client{conn: conn, room: room, userID: userID, send: make(chan []byte)}
 	if clients[room] == nil {
 		clients[room] = make(map[*client]bool)
 	}
 	clients[room][cl] = true
 
+	fmt.Printf("Client connected to room %s: %s\n", room, userID)
+
 	go handleClientMessages(cl)
 
 	for {
-		_, msg, _ := conn.ReadMessage()
-		broadcast <- message{room: room, msg: msg}
+		msgType, msg, err := conn.ReadMessage()
+		if err != nil {
+			fmt.Printf("Read message: %d, %s, %v\n", msgType, msg, err)
+			break
+		}
+		broadcast <- message{room: room, userID: userID, msg: msg}
 	}
 }
 
@@ -64,7 +76,11 @@ func handleClientMessages(client *client) {
 func handleMessages() {
 	for {
 		msg := <-broadcast
+		fmt.Printf("Message received: %+v\n", msg)
 		for client := range clients[msg.room] {
+			if client.userID == msg.userID {
+				continue
+			}
 			select {
 			case client.send <- msg.msg:
 			default:
