@@ -47,19 +47,35 @@ func main() {
 		receiveMessages(ctx, conn)
 	}()
 
-	for scanner.Scan() {
-		msg := scanner.Text()
-		err := conn.WriteMessage(websocket.TextMessage, []byte(msg))
-		if err != nil {
-			fmt.Println("Error sending message:", err)
-			break
-		}
-	}
-
-	fmt.Println(scanner.Err())
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sendMessages(ctx, conn)
+	}()
 
 	wg.Wait()
 	fmt.Println("Client shutting down successfully")
+}
+
+func sendMessages(ctx context.Context, conn *websocket.Conn) {
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if !scanner.Scan() {
+				fmt.Printf("Error reading from stdin: %v\n", scanner.Err())
+				return
+			}
+			msg := scanner.Text()
+			err := conn.WriteMessage(websocket.TextMessage, []byte(msg))
+			if err != nil {
+				fmt.Println("Error sending message:", err)
+				return
+			}
+		}
+	}
 }
 
 func receiveMessages(ctx context.Context, conn *websocket.Conn) {
