@@ -38,6 +38,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		<-ctx.Done()
+		fmt.Printf("ctx.Done() received: %v\n", ctx.Err())
 		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	}()
 
@@ -69,7 +70,9 @@ func sendMessages(ctx context.Context, conn *websocket.Conn) {
 			return
 		default:
 			if !scanner.Scan() {
-				fmt.Printf("Error reading from stdin: %v\n", scanner.Err())
+				if scanner.Err() != nil {
+					fmt.Printf("Error reading from stdin: %v\n", scanner.Err())
+				}
 				return
 			}
 			msg := scanner.Text()
