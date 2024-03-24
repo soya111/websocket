@@ -2,9 +2,12 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net/url"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gorilla/websocket"
 )
@@ -25,7 +28,12 @@ func main() {
 	defer conn.Close()
 	fmt.Println(resp.Header.Get("Userid"))
 
-	go receiveMessages(conn)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	go func() {
+		receiveMessages(ctx, conn)
+	}()
 
 	for scanner.Scan() {
 		msg := scanner.Text()
@@ -35,15 +43,24 @@ func main() {
 			break
 		}
 	}
+
+	fmt.Println(scanner.Err())
+	fmt.Println("Client shutting down successfully")
 }
 
-func receiveMessages(conn *websocket.Conn) {
+func receiveMessages(ctx context.Context, conn *websocket.Conn) {
+	defer fmt.Println("Stopped receiving messages")
 	for {
-		msgType, msg, err := conn.ReadMessage()
-		if err != nil {
-			fmt.Printf("Error receiving message: message type: %d, message: %s, error: %v\n", msgType, string(msg), err)
+		select {
+		case <-ctx.Done():
 			return
+		default:
+			msgType, msg, err := conn.ReadMessage()
+			if err != nil {
+				fmt.Printf("Error receiving message: message type: %d, message: %s, error: %v\n", msgType, string(msg), err)
+				return
+			}
+			fmt.Printf("Received message: %s\n", string(msg))
 		}
-		fmt.Printf("Received message: %s\n", string(msg))
 	}
 }
