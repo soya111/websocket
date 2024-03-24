@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/gorilla/websocket"
@@ -31,7 +32,18 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
+	var wg sync.WaitGroup
+
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+		<-ctx.Done()
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		receiveMessages(ctx, conn)
 	}()
 
@@ -45,11 +57,12 @@ func main() {
 	}
 
 	fmt.Println(scanner.Err())
+
+	wg.Wait()
 	fmt.Println("Client shutting down successfully")
 }
 
 func receiveMessages(ctx context.Context, conn *websocket.Conn) {
-	defer fmt.Println("Stopped receiving messages")
 	for {
 		select {
 		case <-ctx.Done():
