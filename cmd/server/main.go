@@ -44,6 +44,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Client connected to room %s: %s\n", room, userID)
 
+	broadcast <- message{room: room, userID: userID, msg: []byte(userID + " joined the room")}
+
 	go handleClientMessages(cl)
 
 	for {
