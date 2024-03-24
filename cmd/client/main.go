@@ -44,7 +44,11 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		receiveMessages(ctx, conn)
+		err := receiveMessages(ctx, conn)
+		if err != nil {
+			fmt.Println("Error receiving messages:", err)
+			stop()
+		}
 	}()
 
 	wg.Add(1)
@@ -71,25 +75,25 @@ func sendMessages(ctx context.Context, conn *websocket.Conn) {
 			msg := scanner.Text()
 			err := conn.WriteMessage(websocket.TextMessage, []byte(msg))
 			if err != nil {
-				fmt.Println("Error sending message:", err)
+				fmt.Println("Error writing message:", err)
 				return
 			}
 		}
 	}
 }
 
-func receiveMessages(ctx context.Context, conn *websocket.Conn) {
+func receiveMessages(ctx context.Context, conn *websocket.Conn) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		default:
 			msgType, msg, err := conn.ReadMessage()
 			if err != nil {
-				fmt.Printf("Error receiving message: message type: %d, message: %s, error: %v\n", msgType, string(msg), err)
-				return
+				fmt.Printf("Error read message: message type: %d, message: %s, error: %v\n", msgType, string(msg), err)
+				return err
 			}
-			fmt.Printf("Received message: %s\n", string(msg))
+			fmt.Printf("Read message: %s\n", string(msg))
 		}
 	}
 }
